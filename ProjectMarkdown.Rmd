@@ -1,0 +1,300 @@
+# R for Big Data project:
+
+## Loading Packages and data
+
+>Firstly i will start by importing the required packages in order to analyze the data
+
+```{r warning=FALSE,message=FALSE}
+library('tidyverse')
+library('scales')
+library('dplyr')
+library('lubridate')
+library('shiny' )
+load('/Users/issam/OneDrive/Documents/AirBnB.Rdata')
+```
+
+## Manipulating and wrangling the data
+
+>Then I will start by cleaning the listing data set to create my own dataframe as it contains multiple columns that are not very relevant to our analysis.
+
+```{r}
+Df= select(L,id,host_id,host_name,neighbourhood, host_identity_verified,property_type,room_type,accommodates,bathrooms,bedrooms,beds,bed_type,price,minimum_nights,latitude,longitude,zipcode,review_scores_rating)
+head(Df)
+
+```
+
+
+>I will now review the missing values in my new data frame in order to determine how to proceed with them.
+
+>If there are a lot of missing values for a variable I will remove the respective rows, if there are a few and if possible I will replace with the mean of the given variable.
+
+
+```{r}
+colSums(is.na(Df))
+
+```
+```{r}
+Score_rating_missing= 15454/52725
+Bathrooms_missing=243/52725
+Bedrooms_missing=193/52725
+Beds_missing=80/52725
+percent(Score_rating_missing, accuracy=0.01)
+percent(Bathrooms_missing,accuracy=0.01)
+percent(Bedrooms_missing,accuracy=0.01)
+percent(Beds_missing,accuracy=0.01)
+```
+>Since the score missing rating represents 30% of our data I will be removing these rows from my data frame as the host rating is an important factor, if a host is not rated it may be that he does not receive many visits and therefore not relevant to our analysis.
+>Moreover the host is an important factor in an airbnb stay in order for the visitor to have a nice experience which would in turn affect the price, both hosts and visitors have ratings on Airbnb which is a way for both parties to decide.
+
+
+
+```{r}
+Df= na.omit(Df, cols= 'review_score_rating')
+```
+
+>Regarding the bathrooms, beds and bedrooms , as the percentage of missing values is very low I will be imputing these rows with the corresponding mean using the below code:
+
+
+
+```{r warning=FALSE}
+for (z in 1:ncol(Df)) {
+        sel = is.na(Df[, z])
+        Df[sel, z] = mean(Df[, z], na.rm = TRUE)
+    }
+    head(Df)
+```
+
+>We can see as well that some bathrooms have a value of 0.5, it may be that these bathrooms are not complete and missing some amneties or that it may be shared, as such this information will not be updated in our data frame to reflect.
+
+>We can see that some neighbourhoods have misssing values although they are not considered as NA, this is due to a whitespace in the data where the information should be, I will be removing these rows as well in order for it not to affect our data and analysis.
+
+>Changing data type of the neighbourhood variable to a character:
+
+>Although this is not required for our analysis , I will be wrangling our data with both neighbourhood and Zipcodes in case the visitor wishes to filter through neighbourhoods and not an 'arrondissement' as some may not be familiar with arrondissement and since an arrondissement can have multiple neighbourhoods it would be nice to have this option for the visitors.
+>Removing the data with the white space in the neighbourhoods column.
+
+```{r}
+Df$neighbourhood = as.character(Df$neighbourhood)
+Df=Df[!(Df$neighbourhood==''),]
+
+```
+
+>Some neighbourhoods are still mentioned as arrondissement in the data set and i have decided to omit them for the neighbourhood analysis as per below.
+>This is done in order to have a nice shiny application and nice visualization for the visitor if he wishes to filter through neighbourhoods.
+
+
+```{r}
+Df=Df[!(Df$neighbourhood=='XIII Arrondissement' | Df$neighbourhood=='XV Arrondissement' | Df$neighbourhood=='IX Arrondissement' | Df$neighbourhood=='VI Arrondissement' | Df$neighbourhood== 'I Arrondissement' | Df$neighbourhood== 'XIV Arrondissement'|Df$neighbourhood == 'XVII Arrondissement'| Df$neighbourhood == 'XI Arrondissement' | Df$neighbourhood == 'II Arrondissement' | Df$neighbourhood == 'III Arrondissement' | Df$neighbourhood == 'X Arrondissement'| Df$neighbourhood=='IV Arrondissement' | Df$neighbourhood == 'XVI Arrondissement'),]
+```
+
+>Some neighbourhoods have incorrect characters in them(not sure if this due to R being in English for me), as such I have decided to rename them to arrange the names for the visitors:
+
+```{r}
+Df$neighbourhood = gsub('Ã©','é',Df$neighbourhood)
+Df$neighbourhood = gsub('Ã¢','â',Df$neighbourhood)
+Df$neighbourhood = gsub('Ã¨','è',Df$neighbourhood)
+Df$neighbourhood = gsub('Ã´', 'ô', Df$neighbourhood)
+
+```
+
+> The same can be applied for host names just to clean up the data, some names still remain with incorrect letters, this is simply because I am unable to understand the actual name and how it should be:
+
+```{r}
+Df$host_name = gsub('Ã©','é',Df$host_name)
+Df$host_name = gsub('Ã¢','â',Df$host_name)
+Df$host_name = gsub('Ã¨','è',Df$host_name)
+Df$host_name = gsub('Ã´','ô',Df$host_name)
+Df$host_name = gsub('Ã§','ç',Df$host_name)
+Df$host_name = gsub('Ã‰','É',Df$host_name)
+
+```
+## Number of apartments by neighbourhood:
+
+> Reviewing apartments by neighbourhood as per personal analysis:
+
+```{r}
+Df$neighbourhood=factor(Df$neighbourhood)
+count_apartment_per_neighbourhood = Df %>% group_by(Df$neighbourhood) %>% count(Df$neighbourhood)
+count_apartment_per_neighbourhood = count_apartment_per_neighbourhood[order(count_apartment_per_neighbourhood$n, decreasing = TRUE),]
+count_apartment_per_neighbourhood$n= factor(count_apartment_per_neighbourhood$n)
+count_apartment_per_neighbourhood_top5= head(count_apartment_per_neighbourhood, n=5)
+head(count_apartment_per_neighbourhood)
+```
+>Ploting dataframe:
+>Please enlarge the below plot to view x values correctly and not overlaping each other :).
+
+```{r}
+
+neighbourhood_plot = ggplot(data=count_apartment_per_neighbourhood_top5)+geom_bar (aes(x=`Df$neighbourhood`, y=n, fill=`Df$neighbourhood`),stat='identity')+theme_minimal()+ labs(title= "Number of aparments for top 6 neighbourhoods", y="Number of Apartments", x = "Neighbourhoods", fill = "Neighbourhoods") + theme(plot.title = element_text(hjust = 0.4), plot.subtitle = element_text(hjust = 0.4)) +  geom_text(aes(x=`Df$neighbourhood`,y=n,label=n),position=position_dodge(width=0.9), vjust=-0.25)
+neighbourhood_plot
+
+```
+
+We can see here that the region that has the most apartments to offer is Montmartre
+
+
+## Relationship of price and apartment features as per project:
+
+>Creating a dataframe for mean of rental price per beds in the appartment with respect to type of room/apartment:
+
+```{r}
+beds_df= Df %>% group_by(beds,room_type) %>% summarise(mean_price=mean(as.numeric(price))) 
+head(beds_df)
+
+```
+>Ploting dataframe:
+
+```{r}
+beds_plot = ggplot(data=beds_df)+geom_bar(aes(x=factor(`beds`), y=mean_price, fill=`beds`),stat='identity')+theme_minimal()+ labs(title= "Average of price per number of beds and type of apartment", y="Price", x = "Number of beds", fill = "Number of beds") + theme(plot.title = element_text(hjust = 0.4), plot.subtitle = element_text(hjust = 0.4))+facet_wrap(~room_type)
+beds_plot
+```
+
+We can see here that the prices per beds vary depending on the type of room that is offered.
+
+
+>Creating a dataframe for number of bathrooms and corresponding price mean with respect to type of apartment:
+
+```{r}
+bathroom_df= Df %>% group_by(bathrooms,room_type) %>% summarise(mean_price=mean(as.numeric(price))) 
+head(bathroom_df)
+```
+
+>Ploting dataframe:
+
+```{r}
+bathroom_plot = ggplot(data=bathroom_df)+geom_bar(aes(x=factor(`bathrooms`), y=mean_price, fill=`bathrooms`),stat='identity')+theme_minimal()+ labs(title= "Average of price per number of bathrooms and type of apartment", y="Price", x = "Number of bathrooms", fill = "Number of bathrooms") + theme(plot.title = element_text(hjust = 0.4), plot.subtitle = element_text(hjust = 0.4))+facet_wrap(~room_type)
+bathroom_plot
+```
+We can see in this graph that usually, the higher the number of bathrooms in the apartment, the higher the price, however this is not the case for shared rooms.
+
+
+>Creating a dataframe for mean of rental price per bedrooms in the appartment with respect to type of room/apartment:
+
+```{r}
+bedrooms_df= Df %>% group_by(bedrooms,room_type) %>% summarise(mean_price=mean(as.numeric(price))) 
+head(bedrooms_df)
+```
+
+>Ploting results:
+
+```{r}
+bedroom_plot = ggplot(data=bedrooms_df)+geom_bar(aes(x=factor(`bedrooms`), y=mean_price, fill=`bedrooms`),stat='identity')+theme_minimal()+ labs(title= "Average of price per number of bedrooms and type of apartment", y="Price", x = "Number of bedrooms", fill = "Number of bedrooms") + theme(plot.title = element_text(hjust = 0.4), plot.subtitle = element_text(hjust = 0.4))+facet_wrap(~room_type)
+bedroom_plot
+```
+
+We can see in this graph that for entire homes and apartments, the price per number of bedrooms is higher, the data is not conclusive however for private and shared rooms.
+
+>Creating a dataframe for mean of rental price per number of people accomodated in the appartment with respect to type of room/apartment:
+
+```{r}
+accommodation_df= Df %>% group_by(accommodates,room_type) %>% summarise(mean_price=mean(as.numeric(price))) 
+head(accommodation_df)
+```
+
+>Ploting results of dataframe:
+
+```{r}
+acc_plot = ggplot(data=accommodation_df)+geom_bar(aes(x=factor(`accommodates`), y=mean_price, fill=`accommodates`),stat='identity')+theme_minimal()+ labs(title= "Average of price per number of people accommodated and type of apartment", y="Price", x = "Number of accommodation", fill = "Number of accommodation") + theme(plot.title = element_text(hjust = 0.4), plot.subtitle = element_text(hjust = 0.4))+facet_wrap(~room_type)
+acc_plot
+```
+
+We can see here that the higher the number of people accomodated in general for enitre homes and apartments, the higher the price, however this is not the case for shared rooms and private rooms in an apartment.
+
+
+## Number of apartments per host:
+
+> As per the project request, below is the code to review total number of appartments per host:
+
+```{r}
+Df$host_id= factor(Df$host_id)
+count_apartment_per_host = Df %>% group_by(Df$host_id) %>% count(Df$host_id)
+count_apartment_per_host = count_apartment_per_host[order(count_apartment_per_host$n, decreasing = TRUE),]
+count_apartment_per_host$n= factor(count_apartment_per_host$n)
+Df_apartment_per_host_top8 = head(count_apartment_per_host,n=8)
+head(count_apartment_per_host)
+
+```
+
+>Ploting number of appartments for top 8 host ids:
+
+```{r}
+host_plot = ggplot(data=Df_apartment_per_host_top8)+geom_bar(aes(x=`Df$host_id`, y=n, fill=`Df$host_id`),stat='identity')+theme_minimal()+ labs(title= "Number of aparments for top 8 host ids", y="Number of Apartments", x = "Host ID's", fill = "Host ID's") + theme(plot.title = element_text(hjust = 0.4), plot.subtitle = element_text(hjust = 0.4))+geom_text(aes(x=`Df$host_id`,y=n,label=n),position=position_dodge(width=0.9), vjust=-0.25)
+host_plot
+
+```
+
+## Price per arrondissement:
+
+
+>Omiting NA values for zipcode/arrondissement:
+
+```{r}
+Df=Df[!(Df$zipcode==''),]
+
+```
+>Renaming column name for project:
+
+```{r}
+Df = Df %>% rename(Arrondissement = zipcode)
+```
+
+
+>Creating a dataframe for the arrondissement and mean of price to plot
+
+```{r}
+arrondissement_df= Df %>% select(c('Arrondissement','price'))%>% filter(Arrondissement %in% c(seq(75001,75020,1)))%>% group_by(Arrondissement)%>%summarise(mean_price=mean(as.numeric(price)))
+head(arrondissement_df)
+```
+
+>Plotting average price per arrondissement
+
+```{r}
+arr_plot = ggplot(data=arrondissement_df)+geom_bar(aes(x=factor(`Arrondissement`), y=mean_price, fill=`Arrondissement`,),stat='identity')+theme_minimal()+ labs(title= "Average of price per arrondissement", y="Price", x = "Arrondissement", fill = "Arrondissement") + theme(plot.title = element_text(hjust = 0.4), plot.subtitle = element_text(hjust = 0.4))
+arr_plot
+```
+
+We can see in this graph that the most expensive apartments are located in the 20th and 18th arrondissement.
+
+
+## Visit frequency per arrondissement
+
+>Creating a dataframe that has arrondissement, price and id in order to join with the R data frame which contains dates, I have selected the zipcodes from 75001 to 75020 which are the zipcodes for 'central' Paris:
+
+```{r}
+arrondissement_df2 = Df %>% select(c('Arrondissement','price','id'))%>% filter(Arrondissement %in% c(seq(75001,75020,1)))%>% group_by(Arrondissement,id)%>%summarise(mean_price=mean(as.numeric(price)))
+head(arrondissement_df2)
+```
+
+>Joining the two dataframes R and arrondissement_df2:
+
+```{r}
+visit_freq_df <-
+  inner_join(R,arrondissement_df2,by=c('listing_id'='id'))
+visit_freq_df$date <- ymd(visit_freq_df$date)
+visit_freq_df$Year <- format(as.Date(visit_freq_df$date), "%Y")
+visit_freq_df$month <- format(as.Date(visit_freq_df$date), "%m")
+head(visit_freq_df)
+```
+
+>Grouping by month and year, and summarizing with respect to visits per month for each arrondissement:
+
+```{r}
+visit_freq_df<- visit_freq_df %>% group_by(Year,month,Arrondissement) %>% summarize(nummonth=n())
+head(visit_freq_df)
+```
+
+>Ploting dataframe:
+
+```{r}
+visit_plot=ggplot(visit_freq_df, aes(x = month, y = nummonth, group = Year, color = Year, linetype = Year)) +
+geom_line()+ xlab("Month") + ylab("Total visits") + facet_wrap(~ Arrondissement)
+visit_plot
+```
+
+It seems that in mid 2016 there was a sharp decline for the visit frequency, the graph shows that for the rest of the years it was stable and that 2015 was the second highest year for visits after 2016.
+
+
+
+
+
+
